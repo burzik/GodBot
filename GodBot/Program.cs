@@ -9,6 +9,8 @@ using System.IO;
 
 using FireSharp.Config;
 using FireSharp.Interfaces;
+using FireSharp.Response;
+using Newtonsoft.Json;
 
 namespace GodBot
 {
@@ -61,6 +63,9 @@ namespace GodBot
             client.MessageUpdated += MessageUpdated;
             client.MessageDeleted += MessageDeleted;
 
+            Firebase firebase = new Firebase();
+            firebase.initFirebase(authSecret, basePath);
+
             await Task.Delay(-1);
         }
 
@@ -76,25 +81,43 @@ namespace GodBot
                 else await message.Channel.SendMessageAsync(":-1:");
             }
 
-            roles.Contains("");
             string[] tokens = message.Content.Split(' ');
+            string role = "";
+            foreach (var token in tokens)
+            {
+                if (token != tokens[0])
+                {
+                    if (role != "") role += " ";
+                    role += token;
+                }
+            }
+
             if (tokens[0] == "!addrole")
             {
-                if (roles.Contains(tokens[1]))
+                if (roles.Contains(role))
                 {
                     var user1 = user as SocketGuildUser;
-                    var role = (user1 as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == tokens[1]);
-                    if (user1.Roles.Contains(role))
-                        await user1.RemoveRoleAsync(role);
-                    //await message.Channel.SendMessageAsync("This role doesn't exist <:FeelsBadMan:456407012243275787>");
-                    else await user1.AddRoleAsync(role);
+                    var userRole = (user1 as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
+                    
+                    if (user1.Roles.Contains(userRole))
+                        await user1.RemoveRoleAsync(userRole);
+                    else await user1.AddRoleAsync(userRole);
 
                 }
             }
 
+            if (tokens[0] == "!removerole")
+            {
+                var user1 = user as SocketGuildUser;
+                var userRole = (user1 as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
+                if (user1.Roles.Contains(userRole))
+                    await user1.RemoveRoleAsync(userRole);
+                //await message.Channel.SendMessageAsync("This role doesn't exist <:FeelsBadMan:456407012243275787>");
+            }
+
             if (user.Username == meeBot)
             {
-                if (message.Content.Contains(""))
+                if (message.Content.Equals(""))
                 {
                     //foreach (var ment in message.MentionedUsers)
                     //{

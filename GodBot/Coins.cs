@@ -1,8 +1,13 @@
-﻿namespace GodBot
+﻿using System;
+
+namespace GodBot
 {
     internal class Coins
     {
-        public string userId { get; set; }
+        public ulong userId { get; set; }
         public float coinsCount { get; set; }
+        public DateTime joinedVoice { get; set; }
+        public float userRate { get; set; }
+        //roles
     }
 }

@@ -11,6 +11,7 @@ using FireSharp.Config;
 using FireSharp.Interfaces;
 using FireSharp.Response;
 using Newtonsoft.Json;
+using System.Globalization;
 
 namespace GodBot
 {
@@ -21,9 +22,13 @@ namespace GodBot
 
         //Constants 
         const string meeBot = "MEE6";
+        const string mainUsersPath = "Users";
+        float userRate = 1;
         HashSet<String> roles = new HashSet<string>();
         IFirebaseClient firebaseClient;
         IFirebaseConfig firebaseConfig;
+        Firebase firebase = new Firebase();
+        
 
         public async Task MainAsync()
         {
@@ -45,7 +50,8 @@ namespace GodBot
                 BasePath = basePath,
             };
 
-            firebaseClient = new FireSharp.FirebaseClient(firebaseConfig);
+            //firebaseClient = new FireSharp.FirebaseClient(firebaseConfig);
+            firebase.initFirebase(authSecret, basePath);
 
             roles.Add("Dota 2");
             roles.Add("CS:GO");
@@ -62,16 +68,111 @@ namespace GodBot
             client.MessageReceived += MessageReceived;
             client.MessageUpdated += MessageUpdated;
             client.MessageDeleted += MessageDeleted;
-
-            Firebase firebase = new Firebase();
-            firebase.initFirebase(authSecret, basePath);
+            client.UserVoiceStateUpdated += UserVoiceStateUpdated;
 
             await Task.Delay(-1);
+        }
+
+        private async Task UserVoiceStateUpdated(SocketUser socketUser, SocketVoiceState socketVoiceState, SocketVoiceState userVoiceStateUpdated)
+        {
+            var userInfo = await firebase.getSingleUser(mainUsersPath, socketUser.Id);
+            SocketGuildUser guildUser = socketUser as SocketGuildUser;
+
+            if (userInfo == null)
+            {
+                userInfo = new Coins();
+                userInfo.userId = socketUser.Id;
+                userInfo.coinsCount = 100;
+                userInfo.joinedVoice = DateTime.UtcNow;
+                userInfo.userRate = 0.5f;
+                await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                return;
+            }
+
+            if (userVoiceStateUpdated.VoiceChannel != null)
+            {
+                if (userVoiceStateUpdated.VoiceChannel.Name == "AFK♿")
+                {
+                    if (socketVoiceState.VoiceChannel != null)
+                    {
+                        if (socketVoiceState.VoiceChannel.Name != "AFK♿")
+                        {
+                            if (guildUser.IsDeafened || guildUser.IsSelfDeafened)
+                                return;
+                            TimeSpan result = DateTime.UtcNow.Subtract(userInfo.joinedVoice);
+                            int seconds = Convert.ToInt32(result.TotalSeconds);
+                            var coinsSum = userInfo.coinsCount + seconds;
+
+                            userInfo.joinedVoice = DateTime.UtcNow;
+                            userInfo.coinsCount = coinsSum;
+                            await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                            return;
+                        }
+                        else if (socketVoiceState.VoiceChannel.Name == "AFK♿")
+                        {
+                            userInfo.joinedVoice = DateTime.UtcNow;
+                            await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                            return;
+                        }
+                    }
+                }
+                if (socketVoiceState.VoiceChannel != null)
+                {
+                    if (socketVoiceState.VoiceChannel.Name == "AFK♿")
+                    {
+                        userInfo.joinedVoice = DateTime.UtcNow;
+                        await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                        return;
+                    }
+                }
+            }
+            else if (socketVoiceState.VoiceChannel.Name == "AFK♿")
+            {
+                userInfo.joinedVoice = DateTime.UtcNow;
+                await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                return;
+            }
+
+            if ((userVoiceStateUpdated.IsDeafened || userVoiceStateUpdated.IsSelfDeafened) && userVoiceStateUpdated.VoiceChannel != null)
+            {
+                if (socketVoiceState.IsDeafened && userVoiceStateUpdated.IsDeafened || socketVoiceState.IsSelfDeafened && userVoiceStateUpdated.IsSelfDeafened)
+                    return;
+
+                if ((socketVoiceState.IsSelfDeafened || userVoiceStateUpdated.IsSelfDeafened) && socketVoiceState.VoiceChannel == null)
+                    return;
+
+                TimeSpan result = DateTime.UtcNow.Subtract(userInfo.joinedVoice);
+                int seconds = Convert.ToInt32(result.TotalSeconds);
+                userInfo.joinedVoice = DateTime.UtcNow;
+                userInfo.coinsCount = userInfo.coinsCount + (seconds * userInfo.userRate);
+                await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+            }
+
+            if (socketVoiceState.VoiceChannel != null && (socketVoiceState.IsMuted != userVoiceStateUpdated.IsMuted && (socketVoiceState.IsDeafened == userVoiceStateUpdated.IsDeafened) 
+                || socketVoiceState.IsSelfMuted != userVoiceStateUpdated.IsSelfMuted && (socketVoiceState.IsSelfDeafened == userVoiceStateUpdated.IsSelfDeafened)) 
+                || socketVoiceState.VoiceChannel != userVoiceStateUpdated.VoiceChannel && socketVoiceState.VoiceChannel != null && userVoiceStateUpdated.VoiceChannel != null)
+                return;
+
+            if (guildUser.VoiceChannel != null && !guildUser.IsSelfDeafened && !guildUser.IsDeafened)
+            {
+                userInfo.joinedVoice = DateTime.UtcNow;
+                await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+                return;
+            }
+            else if(!guildUser.IsSelfDeafened && !guildUser.IsDeafened && !userVoiceStateUpdated.IsDeafened && !userVoiceStateUpdated.IsSelfDeafened)
+            {
+                TimeSpan result = DateTime.UtcNow.Subtract(userInfo.joinedVoice);
+                int seconds = Convert.ToInt32(result.TotalSeconds);
+                userInfo.joinedVoice = DateTime.UtcNow;
+                userInfo.coinsCount = userInfo.coinsCount + (seconds * userInfo.userRate);
+                await firebase.setData(mainUsersPath, socketUser.Id.ToString(), userInfo);
+            }
         }
 
         private async Task MessageReceived(SocketMessage message)
         {
             SocketUser user = message.Author;
+            var guildUser = user as SocketGuildUser;
 
             if (message.Content == "!flip")
             {
@@ -96,22 +197,22 @@ namespace GodBot
             {
                 if (roles.Contains(role))
                 {
-                    var user1 = user as SocketGuildUser;
-                    var userRole = (user1 as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
                     
-                    if (user1.Roles.Contains(userRole))
-                        await user1.RemoveRoleAsync(userRole);
-                    else await user1.AddRoleAsync(userRole);
+                    var userRole = (guildUser as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
+                    
+                    if (guildUser.Roles.Contains(userRole))
+                        await guildUser.RemoveRoleAsync(userRole);
+                    else await guildUser.AddRoleAsync(userRole);
 
                 }
             }
 
             if (tokens[0] == "!removerole")
             {
-                var user1 = user as SocketGuildUser;
-                var userRole = (user1 as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
-                if (user1.Roles.Contains(userRole))
-                    await user1.RemoveRoleAsync(userRole);
+                //var user1 = user as SocketGuildUser;
+                var userRole = (guildUser as IGuildUser).Guild.Roles.FirstOrDefault(x => x.Name == role);
+                if (guildUser.Roles.Contains(userRole))
+                    await guildUser.RemoveRoleAsync(userRole);
                 //await message.Channel.SendMessageAsync("This role doesn't exist <:FeelsBadMan:456407012243275787>");
             }
 
@@ -142,6 +243,35 @@ namespace GodBot
                 System.Threading.Thread.Sleep(10000);
                 await message.DeleteAsync();
             }
+
+            await addCoinAsync(user.Id);
+        }
+
+        public async Task addCoinAsync(ulong userId)
+        {
+            var result = await firebase.getSingleUser("Coins", userId);
+            if (result == null)
+            {
+                Coins user = new Coins()
+                {
+                    coinsCount = 1,
+                    userId = userId,
+                };
+
+                await firebase.setData("Coins", userId.ToString(), user);
+            }
+            else
+            {
+
+                var coins = result.coinsCount + 1;
+                Coins data = new Coins()
+                {
+                    coinsCount = coins,
+                    userId = userId,
+                };
+
+                await firebase.updateData("Coins", userId.ToString(), data);
+            }
         }
 
         private async Task MessageUpdated(Cacheable<IMessage, ulong> before, SocketMessage after, ISocketMessageChannel channel)
@@ -161,5 +291,6 @@ namespace GodBot
             Console.WriteLine(msg.ToString());
             return Task.CompletedTask;
         }
+
     }
 }

@@ -25,16 +25,22 @@ namespace GodBot
 
             firebaseClient = new FireSharp.FirebaseClient(firebaseConfig);
         }
-        
 
-        public async Task<Dictionary<string, Coins>> getData() {
+        public async Task<Coins> getSingleUser(string path, ulong userId)
+        {
+            FirebaseResponse response = await firebaseClient.GetTaskAsync(path + "/" + userId);
+            var key = JsonConvert.DeserializeObject<Coins>(response.Body);
+            return key;
+        }
+
+        public async Task<Dictionary<string, Coins>> getData(string path) {
             Dictionary<string, Coins> keyHolder = new Dictionary<string, Coins>();
-            FirebaseResponse response = await firebaseClient.GetTaskAsync("Coins");
+            FirebaseResponse response = await firebaseClient.GetTaskAsync(path);
             keyHolder = JsonConvert.DeserializeObject<Dictionary<string, Coins>>(response.Body);
-            foreach (var b in keyHolder) {
-                var z = b.Value;
-                var q = z.userId;
-            }
+            //foreach (var b in keyHolder) {
+            //    var z = b.Value;
+            //    var q = z.userId;
+            //}
             //var list = JsonConvert.DeserializeObject<Coins>(response.Body);
             return keyHolder;
         }
@@ -51,7 +57,10 @@ namespace GodBot
 
         public async Task pushDataAsync(string path, Coins data)
         {
-            PushResponse response = await firebaseClient.PushTaskAsync(path, data);
+            //PushResponse response = await firebaseClient.PushTaskAsync(path, data);
+            DateTime date = DateTime.Now;
+            //DateTime utcdate = DateTime.Now;
+            PushResponse response = await firebaseClient.PushTaskAsync("test", date);
         }
     }
 }

@@ -137,6 +137,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Administration.cs" />
     <Compile Include="Coins.cs" />
     <Compile Include="Firebase.cs" />
     <Compile Include="Program.cs" />
